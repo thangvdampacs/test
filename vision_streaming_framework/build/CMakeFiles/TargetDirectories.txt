@@ -1,0 +1,11 @@
+/export/data/vision_streaming_framework/build/CMakeFiles/vf_core.dir
+/export/data/vision_streaming_framework/build/CMakeFiles/vf_pipeline.dir
+/export/data/vision_streaming_framework/build/CMakeFiles/vf_dag.dir
+/export/data/vision_streaming_framework/build/CMakeFiles/vf_stages.dir
+/export/data/vision_streaming_framework/build/CMakeFiles/edit_cache.dir
+/export/data/vision_streaming_framework/build/CMakeFiles/rebuild_cache.dir
+/export/data/vision_streaming_framework/build/tests/CMakeFiles/edit_cache.dir
+/export/data/vision_streaming_framework/build/tests/CMakeFiles/rebuild_cache.dir
+/export/data/vision_streaming_framework/build/tests/pipeline_with_ai_dag/CMakeFiles/pipeline_with_ai_dag.dir
+/export/data/vision_streaming_framework/build/tests/pipeline_with_ai_dag/CMakeFiles/edit_cache.dir
+/export/data/vision_streaming_framework/build/tests/pipeline_with_ai_dag/CMakeFiles/rebuild_cache.dir

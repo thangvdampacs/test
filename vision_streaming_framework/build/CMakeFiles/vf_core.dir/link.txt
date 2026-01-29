@@ -1,0 +1,2 @@
+/usr/bin/ar qc libvf_core.a CMakeFiles/vf_core.dir/src/core/Buffer.cpp.o CMakeFiles/vf_core.dir/src/core/Frame.cpp.o
+/usr/bin/ranlib libvf_core.a

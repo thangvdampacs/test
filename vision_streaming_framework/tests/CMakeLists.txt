@@ -1,0 +1,1 @@
+add_subdirectory(pipeline_with_ai_dag)

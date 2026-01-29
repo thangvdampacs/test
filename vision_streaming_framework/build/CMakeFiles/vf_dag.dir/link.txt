@@ -1,0 +1,2 @@
+/usr/bin/ar qc libvf_dag.a CMakeFiles/vf_dag.dir/src/dag/MergeNode.cpp.o CMakeFiles/vf_dag.dir/src/dag/Scheduler.cpp.o CMakeFiles/vf_dag.dir/src/dag/Graph.cpp.o
+/usr/bin/ranlib libvf_dag.a

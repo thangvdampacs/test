@@ -1,0 +1,2 @@
+/usr/bin/ar qc libvf_pipeline.a CMakeFiles/vf_pipeline.dir/src/pipeline/StageThread.cpp.o CMakeFiles/vf_pipeline.dir/src/pipeline/Pipeline.cpp.o
+/usr/bin/ranlib libvf_pipeline.a
