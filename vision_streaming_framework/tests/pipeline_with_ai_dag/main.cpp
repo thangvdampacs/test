@@ -20,39 +20,88 @@
 
 using namespace std::chrono;
 
-/* =========================================================
- * Fake AI Nodes
- * ========================================================= */
-class FakeAINode : public vf::dag::Node {
-public:
-    FakeAINode(std::string name, int ms)
-        : m_name(std::move(name)), m_ms(ms) {}
-
-    const std::string& name() const override {
-        return m_name;
+static const char* toStr(vf::dag::NodeStatus s) {
+    switch (s) {
+        case vf::dag::NodeStatus::VALID:   return "OK";
+        case vf::dag::NodeStatus::TIMEOUT: return "TIMEOUT";
+        case vf::dag::NodeStatus::MISSING: return "MISS";
     }
+    return "?";
+}
 
-    vf::dag::DagResult run() override {
-        std::this_thread::sleep_for(milliseconds(m_ms));
-        vf::dag::DagResult r;
-        r.name = m_name;
-        r.valid = true;
-        r.timestamp = steady_clock::now();
-        return r;
+/* =====================================================
+ * Dummy Capture Stage
+ * ===================================================== */
+class CaptureStage : public vf::pipeline::IStage {
+public:
+    vf::core::Frame process(const vf::core::Frame&) override {
+        vf::core::Frame f;
+        f.setFrameId(++m_id);
+        f.setTimestamp(steady_clock::now());
+        return f;
     }
 
 private:
-    std::string m_name;
-    int m_ms;
+    uint64_t m_id{0};
 };
 
-/* =========================================================
- * Dummy forward stage
- * ========================================================= */
-class ForwardStage : public vf::pipeline::IStage {
+
+/* =====================================================
+ * Dummy Display Stage
+ * ===================================================== */
+class DisplayStage : public vf::pipeline::IStage {
 public:
     vf::core::Frame process(const vf::core::Frame& frame) override {
+        std::cout << "[Display] Frame " << frame.frameId();
+
+        vf::dag::DagResult r;
+        if (frame.getMeta("vf.ai.result", r)) {
+            std::cout << " | AI(" << r.name << ") from frame " << r.src_frame_id << " | ";
+            for (const auto& [node, status] : r.node_status) {
+                std::cout << node << ":" << toStr(status) << " ";
+            }
+        } else {
+            std::cout << " | AI:none";
+        }
+
+        std::cout << "\n";
         return frame;
+    }
+};
+
+/* =====================================================
+ * Dummy AI Nodes
+ * ===================================================== */
+class ObjectNode : public vf::dag::Node {
+public:
+    vf::dag::DagResult run() override {
+        std::this_thread::sleep_for(milliseconds(10));
+        vf::dag::DagResult r;
+        r.name = "object";
+        r.valid = true;
+        return r;
+    }
+};
+
+class LaneNode : public vf::dag::Node {
+public:
+    vf::dag::DagResult run() override {
+        std::this_thread::sleep_for(milliseconds(12));
+        vf::dag::DagResult r;
+        r.name = "lane";
+        r.valid = true;
+        return r;
+    }
+};
+
+class SignNode : public vf::dag::Node {
+public:
+    vf::dag::DagResult run() override {
+        std::this_thread::sleep_for(milliseconds(13)); // slow
+        vf::dag::DagResult r;
+        r.name = "sign";
+        r.valid = true;
+        return r;
     }
 };
 
@@ -60,75 +109,53 @@ public:
  * Main
  * ========================================================= */
 int main() {
-    std::cout << "=== Pipeline + Async AI DAG (30 FPS) ===\n";
+    std::cout << "=== Pipeline + AI DAG (30 FPS) ===\n";
 
     /* ---------------- DAG ---------------- */
-    auto mergeNode = std::make_shared<vf::dag::MergeNode>(
-        /* mandatory */ std::set<std::string>{"object", "lane"},
-        /* optional  */ std::set<std::string>{"traffic"},
-        /* timeout   */ milliseconds(15)
-    );
+    std::cout << "start build DAG" << std::endl;
+    auto mergeNode = std::make_shared<vf::dag::MergeNode>(15); //set 15ms timeout for DAG
 
-    auto scheduler = std::make_shared<vf::dag::Scheduler>(mergeNode);
-    scheduler->addNode(std::make_shared<FakeAINode>("object", 3));
-    scheduler->addNode(std::make_shared<FakeAINode>("lane", 11));
-    scheduler->addNode(std::make_shared<FakeAINode>("traffic", 20));
+    mergeNode->addMandatory("object");
+    mergeNode->addMandatory("lane");
+    mergeNode->addMandatory("sign");
 
-    auto graph = std::make_shared<vf::dag::Graph>(scheduler);
-    auto aiStage = std::make_shared<vf::stages::AIStage>(graph);
-
+    auto scheduler  = std::make_shared<vf::dag::Scheduler>(mergeNode,1);
+    auto graph      = std::make_shared<vf::dag::Graph>(scheduler);
+    graph->addNode(std::make_shared<ObjectNode>());
+    graph->addNode(std::make_shared<LaneNode>());
+    graph->addNode(std::make_shared<SignNode>());
     /* ---------------- Pipeline ---------------- */
     constexpr size_t QDEPTH = 2;
     auto q0 = std::make_shared<vf::pipeline::StageQueue<vf::core::Frame>>(QDEPTH);
     auto q1 = std::make_shared<vf::pipeline::StageQueue<vf::core::Frame>>(QDEPTH);
+    auto q2 = std::make_shared<vf::pipeline::StageQueue<vf::core::Frame>>(QDEPTH);
 
-    auto forward = std::make_shared<ForwardStage>();
+    auto capture = std::make_shared<CaptureStage>();
+    auto ai      = std::make_shared<vf::stages::AIStage>(graph);
+    auto display = std::make_shared<DisplayStage>();
 
-    auto stageAI = std::make_shared<vf::pipeline::StageThread>(aiStage, q0, q1);
-    auto stageOut = std::make_shared<vf::pipeline::StageThread>(forward, q1, nullptr);
+    auto state_capture = std::make_shared<vf::pipeline::StageThread>(capture, q0, q1);
+    auto stage_ai = std::make_shared<vf::pipeline::StageThread>(ai, q1, q2);
+    auto state_display = std::make_shared<vf::pipeline::StageThread>(display, q2, nullptr);
 
-    vf::pipeline::Pipeline pipeline;
-    pipeline.addStage(stageAI);
-    pipeline.addStage(stageOut);
+    vf::pipeline::Pipeline pipeline(graph);
+    pipeline.addQueue(q0);
+    pipeline.addQueue(q1);
+    pipeline.addQueue(q2);
+    pipeline.addStage(state_capture);
+    pipeline.addStage(stage_ai);
+    pipeline.addStage(state_display);
     pipeline.start();
 
     /* ---------------- 30 FPS simulation ---------------- */
     constexpr int FPS = 30;
-    constexpr int TOTAL_FRAMES = 90;
+    constexpr int TOTAL_FRAMES = 30;
     auto framePeriod = milliseconds(1000 / FPS);
 
-    auto start = steady_clock::now();
-
     for (int i = 0; i < TOTAL_FRAMES; ++i) {
-        auto now = steady_clock::now();
-        auto ts_ms = duration_cast<milliseconds>(now - start).count();
-
-        auto buf = vf::core::Buffer::allocate(640 * 480);
-        vf::core::Frame frame(
-            i,
-            now,
-            640,
-            480,
-            vf::core::PixelFormat::GRAY8,
-            buf
-        );
-
-        q0->push(frame);
-
-        /* Fetch latest AI result (non-blocking) */
-        auto ai = aiStage->latestResult();
-        if (ai && ai->valid) {
-            std::cout << "[PIPE] frame=" << i
-                      << " t=" << ts_ms << " ms"
-                      << " | AI(frame=" << ai->frame_id
-                      << ", lag=" << (i - ai->frame_id) << ")\n";
-        } else {
-            std::cout << "[PIPE] frame=" << i
-                      << " t=" << ts_ms << " ms"
-                      << " | AI=none\n";
-        }
-
-        std::this_thread::sleep_until(now + framePeriod);
+        vf::core::Frame dummy_frame;
+        q0->push(dummy_frame);
+        std::this_thread::sleep_for(milliseconds(framePeriod));
     }
 
     pipeline.stop();

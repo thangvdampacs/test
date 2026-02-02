@@ -1,35 +1,37 @@
 #pragma once
-
+#include <set>
 #include <map>
 #include <string>
-#include <set>
 #include <chrono>
 
 #include "vf/dag/DagResult.hpp"
 
 namespace vf::dag {
 
-/**
- * @brief Merge policy node
- */
 class MergeNode {
 public:
-    MergeNode(
-        std::set<std::string> mandatory,
-        std::set<std::string> optional,
-        std::chrono::milliseconds timeout
-    );
+    enum class Decision 
+    { 
+        WAIT, 
+        READY, 
+        TIMEOUT 
+    };
 
-    /**
-     * @brief Try merge available results
-     */
-    bool merge(
-        const std::map<std::string, DagResult>& inputs,
-        DagResult& out
-    );
-    
-    std::chrono::milliseconds m_timeout;
+    explicit MergeNode(uint64_t timeout_ms);
+
+    void addMandatory(const std::string& name);
+    void addOptional(const std::string& name);
+
+    uint64_t timeout_ms() const noexcept;
+
+    Decision evaluate(const std::map<std::string, DagResult>& results,
+                      DagResult& out,
+                      std::chrono::steady_clock::time_point start,
+                      std::chrono::steady_clock::time_point now) const;
+
 private:
+
+    uint64_t m_timeoutMs;
     std::set<std::string> m_mandatory;
     std::set<std::string> m_optional;
 };

@@ -1,17 +1,32 @@
 #pragma once
-
 #include <string>
+#include <vector>
 #include <chrono>
+#include <unordered_map>
 
 namespace vf::dag {
 
-/**
- * @brief Result produced by one DAG node
- */
+enum class NodeStatus {
+    VALID,
+    TIMEOUT,
+    MISSING
+};
+
 struct DagResult {
+
     std::string name;
-    bool        valid{false};
-    std::chrono::steady_clock::time_point timestamp;
+
+    uint64_t src_frame_id{0};
+    std::chrono::steady_clock::time_point src_timestamp{};
+
+    bool valid{false};
+
+    // demo payload
+    std::vector<int> dummy_data;
+
+    void mergeFrom(const DagResult& other);
+
+    std::unordered_map<std::string, NodeStatus> node_status;
 };
 
 } // namespace vf::dag

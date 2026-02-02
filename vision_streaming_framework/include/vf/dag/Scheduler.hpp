@@ -1,36 +1,48 @@
 #pragma once
-
-#include <vector>
+#include <thread>
+#include <atomic>
 #include <memory>
+#include <vector>
 #include <map>
 #include <mutex>
-#include <future>
-#include <thread>
 
+#include "vf/core/Frame.hpp"
+#include "vf/pipeline/StageQueue.hpp"
 #include "vf/dag/Node.hpp"
 #include "vf/dag/MergeNode.hpp"
+#include "vf/dag/DagResult.hpp"
 
 namespace vf::dag {
 
 class Scheduler {
 public:
-    explicit Scheduler(std::shared_ptr<MergeNode> merge);
+    Scheduler(std::shared_ptr<MergeNode> merge, size_t queue_depth = 1);
+    ~Scheduler();
+
+    void start();
+    void stop();
+
+    void submit(const vf::core::Frame& frame);
+    bool try_get_latest(DagResult& out);
 
     void addNode(std::shared_ptr<Node> node);
 
-    DagResult run();
-
 private:
-    static DagResult nodeWorker(std::shared_ptr<Node> node);
+    void workerLoop();
+    DagResult runDagForFrame(const vf::core::Frame& frame);
 
-private:
     std::vector<std::shared_ptr<Node>> m_nodes;
     std::shared_ptr<MergeNode> m_merge;
 
-    std::map<std::string, DagResult> m_results;
-    std::mutex m_mutex;
+    vf::pipeline::StageQueue<vf::core::Frame> m_frameQueue;
 
-    std::vector<std::future<DagResult>> m_futures;
+    std::thread m_worker;
+    std::atomic<bool> m_running{false};
+
+    std::mutex m_resultMutex;
+    DagResult m_latestResult;
+    bool m_hasResult{false};
 };
 
 } // namespace vf::dag
+

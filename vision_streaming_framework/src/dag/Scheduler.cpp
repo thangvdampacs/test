@@ -5,68 +5,118 @@ using namespace std::chrono;
 
 namespace vf::dag {
 
-Scheduler::Scheduler(std::shared_ptr<MergeNode> merge)
-    : m_merge(std::move(merge)) {}
+Scheduler::Scheduler(std::shared_ptr<MergeNode> merge, size_t depth)
+    : m_merge(std::move(merge)), m_frameQueue(depth) {}
+
+Scheduler::~Scheduler() { 
+    stop(); 
+}
 
 void Scheduler::addNode(std::shared_ptr<Node> node) {
     m_nodes.push_back(std::move(node));
 }
 
-/* ==========================================
- * Worker function (NO lambda)
- * ========================================== */
-DagResult Scheduler::nodeWorker(std::shared_ptr<Node> node) {
-    return node->run();
+void Scheduler::start() {
+    if(m_running)
+        return;
+    m_running = true;
+    m_worker = std::thread(&Scheduler::workerLoop, this);
 }
 
-DagResult Scheduler::run() {
-    auto start = steady_clock::now();
-    m_futures.clear();
+void Scheduler::stop() {
+    if(!m_running)
+        return;
+    m_running = false;
+    m_frameQueue.stop();
+    if (m_worker.joinable())
+        m_worker.join();
+}
 
-    /* ======================================
-     * Launch nodes via std::async
-     * ====================================== */
+void Scheduler::submit(const vf::core::Frame& frame) {
+    m_frameQueue.push(frame);
+}
+
+bool Scheduler::try_get_latest(DagResult& out) {
+    std::lock_guard<std::mutex> lock(m_resultMutex);
+    if (!m_hasResult)
+        return false;
+    out = m_latestResult;
+    return true;
+}
+
+void Scheduler::workerLoop() {
+    while (m_running) {
+        vf::core::Frame frame;
+        if (!m_frameQueue.pop(frame))
+            break;
+
+        DagResult result = runDagForFrame(frame);
+
+        std::lock_guard<std::mutex> lock(m_resultMutex);
+        m_latestResult = result;
+        m_hasResult = true;
+    }
+}
+
+DagResult Scheduler::runDagForFrame(const vf::core::Frame& frame) {
+    DagResult merged;
+    merged.src_frame_id  = frame.frameId();
+    merged.src_timestamp = frame.timestamp();
+
+    /* -----------------------------------------
+     * Launch nodes in parallel
+     * ----------------------------------------- */
+    std::vector<std::thread> workers;
+    std::mutex partialMutex;
+    std::map<std::string, DagResult> partial;
+
+    auto start = steady_clock::now();
+
     for (auto& node : m_nodes) {
-        m_futures.emplace_back(
-            std::async(
-                std::launch::async,
-                &Scheduler::nodeWorker,
-                node
-            )
-        );
+        workers.emplace_back([&, node] {
+            DagResult r = node->run();
+            std::lock_guard<std::mutex> lock(partialMutex);
+            partial[r.name] = r;
+        });
     }
 
-    DagResult merged;
+    /* -----------------------------------------
+     * Merge loop (READY / TIMEOUT / WAIT)
+     * ----------------------------------------- */
+    while (m_running) {
+        auto decision = m_merge->evaluate(
+            partial,
+            merged,
+            start,
+            steady_clock::now()
+        );
 
-    /* ======================================
-     * Merge loop with timeout
-     * ====================================== */
-    while (true) {
-        {
-            std::lock_guard<std::mutex> lock(m_mutex);
-
-            // collect finished results (NON-BLOCKING)
-            for (auto& f : m_futures) {
-                if (f.valid() && f.wait_for(milliseconds(0)) == std::future_status::ready) {
-
-                    DagResult r = f.get();   // safe: already ready
-                    m_results[r.name] = r;
-                }
-            }
-
-            if (m_merge->merge(m_results, merged)) {
-                break;
-            }
-        }
-
-        if (steady_clock::now() - start > milliseconds(m_merge->m_timeout)) {
+        if (decision == MergeNode::Decision::READY) {
+            merged.valid = true;
+            merged.name  = "READY";
             break;
         }
 
-        std::this_thread::sleep_for(milliseconds(1));
+        if (decision == MergeNode::Decision::TIMEOUT) {
+            merged.valid = true;
+            merged.name  = "TIMEOUT";
+            break;
+        }
+
+        // WAIT -> yield CPU
+        std::this_thread::yield();
+    }
+
+    /* -----------------------------------------
+     * Join all node workers
+     * ----------------------------------------- */
+    for (auto& t : workers) {
+        if (t.joinable())
+            t.join();
     }
 
     return merged;
 }
 
 } // namespace vf::dag
+

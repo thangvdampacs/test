@@ -1,1 +1,2 @@
 add_subdirectory(pipeline_with_ai_dag)
+add_subdirectory(pipeline_push_1000_frames)

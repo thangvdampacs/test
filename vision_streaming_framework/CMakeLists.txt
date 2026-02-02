@@ -13,18 +13,18 @@ include_directories(
 add_library(vf_core
     src/core/Buffer.cpp
     src/core/Frame.cpp
+    src/core/PixelFormat.cpp
 )
 
 # ===== pipeline library =====
 add_library(vf_pipeline
-    # src/pipeline/StageQueue.cpp
     src/pipeline/StageThread.cpp
     src/pipeline/Pipeline.cpp
 )
 
 # ===== dag library =====
 add_library(vf_dag
-    # src/dag/Node.cpp
+    src/dag/DagResult.cpp
     src/dag/MergeNode.cpp
     src/dag/Scheduler.cpp
     src/dag/Graph.cpp

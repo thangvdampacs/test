@@ -10,9 +10,6 @@
 
 namespace vf::pipeline {
 
-/**
- * @brief Thread wrapper for 1 stage
- */
 class StageThread {
 public:
     StageThread(

@@ -7,7 +7,7 @@
 using vf::core::Buffer;
 
 /* ============================
- * Custom deleter để test wrap
+ * Custom deleter to test wrap
  * ============================ */
 static void customDeleter(uint8_t* p) {
     std::cout << "[customDeleter] called, ptr=" << static_cast<void*>(p) << std::endl;
@@ -57,7 +57,7 @@ int main() {
             buf2->data()[0] = 99;
         } // buf2 destroyed
 
-        // buf1 vẫn còn sống
+        // buf1 still alive
         std::cout << "buf1 sees value after buf2 destroyed: "
                   << int(buf1->data()[0]) << "\n";
     }

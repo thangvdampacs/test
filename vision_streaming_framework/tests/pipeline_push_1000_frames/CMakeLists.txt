@@ -7,15 +7,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(pipeline_push_1000_frames
     main.cpp
-
-    ../../src/core/Buffer.cpp
-    ../../src/core/Frame.cpp
-    ../../src/core/PixelFormat.cpp
-
-    ../../src/pipeline/StageThread.cpp
-    ../../src/pipeline/Pipeline.cpp
 )
 
-target_include_directories(pipeline_push_1000_frames PRIVATE
-    ../../include
+target_link_libraries(pipeline_push_1000_frames
+    vf_core
+    vf_pipeline
+    vf_dag
 )
+
