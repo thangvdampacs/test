@@ -1,2 +1,0 @@
-/usr/bin/ar qc libvf_stages.a CMakeFiles/vf_stages.dir/src/stages/AIStage.cpp.o
-/usr/bin/ranlib libvf_stages.a

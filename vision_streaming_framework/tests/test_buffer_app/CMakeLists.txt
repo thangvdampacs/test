@@ -7,9 +7,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(test_buffer_app
     main.cpp
-    ../../src/core/Buffer.cpp
 )
 
-target_include_directories(test_buffer_app PRIVATE
-    ../../include
+target_link_libraries(test_buffer_app
+    vf_core
 )
